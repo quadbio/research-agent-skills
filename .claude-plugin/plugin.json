@@ -1,6 +1,6 @@
 {
   "name": "research-agent-skills",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "How coding agents write research code, run and hand over research tasks, and set up a project so Claude Code and Codex read the same instructions: three skills, loaded on demand.",
   "author": {
     "name": "quadbio"

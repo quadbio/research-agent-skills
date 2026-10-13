@@ -87,13 +87,31 @@ win over §4 and §6 here.
 - Environments are self-contained: no user site-packages (`PYTHONNOUSERSITE=1`), no packages borrowed from other
   environments, `pip check` and `pip freeze` recorded. Caches go to scratch, never home.
 
-## 7. Verify, then report
+## 7. Look at data and output in small pieces
+
+Everything printed into an agent's context is paid for on every later turn, and a wall of output hides the
+number that matters. Compute in a script; let only summaries in.
+
+- **Data:** shape, columns, dtypes and null counts before content, then at most a few rows (`.head()`,
+  `.describe()`, `value_counts().head(10)`). Never print a whole table, array or dict of unknown size.
+- **Results:** write them to a file in the results tree and report its path plus the few numbers that answer the
+  question. Save plots to disk; look at one only when a decision depends on seeing it.
+- **AnnData:** open it read-only and print the summary, not the contents:
+  `python -c "import anndata as ad; print(ad.read_h5ad('x.h5ad', backed='r'))"`.
+- **Notebooks:** read the code cells only; outputs and embedded images can cost tens of thousands of tokens:
+  `jupyter nbconvert --to script --stdout nb.ipynb` or
+  `jq -r '.cells[] | select(.cell_type=="code") | .source | join("")' nb.ipynb`.
+- **Long commands and job logs:** send output to a log, then read the exit code, the tail and the errors:
+  `cmd > out.log 2>&1; echo "exit=$?"; tail -n 20 out.log; grep -n -i -m 20 -E "error|traceback|warn" out.log`.
+  Use quiet flags where they exist (`pip install -q`, `pytest -q --tb=short`, `git diff --stat` first).
+
+## 8. Verify, then report
 
 - Run the checks from §1 and the project's own checks (config validation, path checks, test suite).
 - New metric or scoring path: a known-answer case first (planted signal, a published number, an identity).
 - Report what you ran and what it showed. If you could not run something, say so.
 
-## 8. Git
+## 9. Git
 
 Commit on your own branch, early and small; never commit to the main branch; ask before pushing. No logs, data or
 notebook outputs in git. New options keep old defaults, so old configs reproduce old runs.
