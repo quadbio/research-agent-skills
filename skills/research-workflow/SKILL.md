@@ -16,7 +16,7 @@ Four habits make a task cheap, safe and easy to pick up:
 
 They live in one folder per task: `<project>/handover/<YYYY-MM-DD>_<short-slug>/`, with one row per task in
 `<project>/handover/INDEX.md`. Templates are in `${CLAUDE_PLUGIN_ROOT}/skills/research-workflow/templates/`; fill them in and delete sections that do not apply.
-A project's own instructions (`CLAUDE.md` / `AGENTS.md`) win where they say something different. In a repo that
+A project's own instructions (`AGENTS.md`, or a `CLAUDE.md`) win where they say something different. In a repo that
 follows quadbio's `analysis-workflow`, the task directory `analysis/<topic>/<name>_vN/` is the task folder: keep
 `PROGRESS.md`, `PLAN.md` and `HANDOVER.md` there and skip `handover/INDEX.md`.
 
@@ -33,8 +33,8 @@ follows quadbio's `analysis-workflow`, the task directory `analysis/<topic>/<nam
      once the question can be answered; do not read "for context").
 
    If the request has two readings, or the scope is unclear, ask now: one question costs less than a wrong
-   exploration. For the exploration itself, use the `token-lean` skill if it is installed (grep and read slices,
-   summaries instead of full output, subagents only for bulky reads with small answers).
+   exploration. Explore cheaply: grep and read slices, summaries instead of full output, subagents only for bulky
+   reads with small answers.
 4. Create the task folder, `PROGRESS.md` from the template, and the INDEX row with status `running`.
 
 ## 2. Plan compute (PLAN.md)

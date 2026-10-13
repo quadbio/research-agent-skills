@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 """Survey a project folder and create the agent scaffolding that is missing.
 
-    setup_project.py <project_dir> [--name NAME] [--code-dir DIR] [--codex-marker] [--go]
+    setup_project.py <project_dir> [--name NAME] [--code-dir DIR] [--go]
 
 Without --go it only reports (dry run). With --go it creates, never overwrites or deletes:
-  CLAUDE.md            from templates/CLAUDE.md, if the folder has neither CLAUDE.md nor AGENTS.md
+  AGENTS.md            from templates/AGENTS.md, if the folder has neither AGENTS.md nor CLAUDE.md
   ENVIRONMENTS.md      template + a survey draft (survey_envs.py on the code folder), if missing
   CODE_MAP.md          template + a survey draft (survey_code.py on the code folder), if missing
   handover/INDEX.md    from templates/INDEX.md, if missing
-  .agent_project_root  only with --codex-marker (Codex project_root_markers), added to .git/info/exclude
-It also reports AGENTS.md / agents.md files to convert, the files that mention them, git worktrees, and whether
-Codex reads CLAUDE.md. The drafts are a starting point: the agent fills the gaps from the project's own documents.
+It also reports CLAUDE.md / CLAUDE.local.md / agents.md files to convert (here or in a folder above, where they stop
+Claude Code from reading AGENTS.md), the files that mention them, git worktrees, and whether .claude/worktrees/ is
+ignored. The drafts are a starting point: the agent fills the gaps from the project's own documents.
 """
 import argparse
 import datetime as dt
@@ -43,6 +43,15 @@ def git(path, *args):
         return None
 
 
+def exists_exact(root, rel):
+    """rel exists under root with exactly this case (macOS file systems ignore case: AGENTS.md is not agents.md)."""
+    d, name = os.path.split(os.path.join(root, rel))
+    try:
+        return name in os.listdir(d)
+    except OSError:
+        return False
+
+
 def guess_code_dir(root):
     """The folder that holds the code: code/ when it exists, else the project root."""
     code = os.path.join(root, "code")
@@ -71,14 +80,6 @@ def references_to(root, filename, max_depth=4, limit=30):
     return hits
 
 
-def codex_reads_claude_md():
-    cfg = os.path.expanduser("~/.codex/config.toml")
-    if not os.path.exists(cfg):
-        return None
-    m = re.search(r"^project_doc_fallback_filenames\s*=\s*\[(.*?)\]", open(cfg).read(), re.M)
-    return bool(m and "CLAUDE.md" in m.group(1))
-
-
 def env_draft(code_dir, name):
     manifests, refs, imports = survey_envs.scan_project(code_dir, 5)
     return render("ENVIRONMENTS.md", name) + DRAFT_HEADER + survey_envs.render(code_dir, manifests, refs, imports) + "\n"
@@ -88,23 +89,23 @@ def code_draft(code_dir, name):
     return render("CODE_MAP.md", name) + DRAFT_HEADER + survey_code.render(code_dir, *survey_code.survey(code_dir, 5)) + "\n"
 
 
-def plan_files(root, name, code_dir, codex_marker):
+def plan_files(root, name, code_dir):
     """[(relative path, producer)] for every scaffolding file that is missing."""
     def exists(rel):
-        return os.path.exists(os.path.join(root, rel))
+        return exists_exact(root, rel)
     plan = []
-    if exists("AGENTS.md") and not exists("CLAUDE.md"):
-        print("skip:  CLAUDE.md template, because AGENTS.md exists: rename it to CLAUDE.md instead (SKILL.md step 5)")
-    elif not exists("CLAUDE.md"):
-        plan.append(("CLAUDE.md", lambda: render("CLAUDE.md", name)))
+    if not exists("AGENTS.md") and (exists("CLAUDE.md") or exists(os.path.join(".claude", "CLAUDE.md"))):
+        print("skip:  AGENTS.md template, because a CLAUDE.md exists: rename it to AGENTS.md instead (SKILL.md step 5)")
+    elif not exists("AGENTS.md") and exists("agents.md"):
+        print("skip:  AGENTS.md template, because agents.md exists: rename it to AGENTS.md instead (SKILL.md step 5)")
+    elif not exists("AGENTS.md"):
+        plan.append(("AGENTS.md", lambda: render("AGENTS.md", name)))
     if not exists("ENVIRONMENTS.md"):
         plan.append(("ENVIRONMENTS.md", lambda: env_draft(code_dir, name)))
     if not exists("CODE_MAP.md"):
         plan.append(("CODE_MAP.md", lambda: code_draft(code_dir, name)))
     if not exists(os.path.join("handover", "INDEX.md")):
         plan.append((os.path.join("handover", "INDEX.md"), lambda: render("INDEX.md", name)))
-    if codex_marker and not exists(".agent_project_root"):
-        plan.append((".agent_project_root", lambda: ""))
     return plan
 
 
@@ -115,22 +116,12 @@ def write_new(root, rel, text):
         fh.write(text)
 
 
-def exclude_marker(root, go):
-    excl = os.path.join(root, ".git", "info", "exclude")
-    if os.path.exists(excl) and ".agent_project_root" in open(excl).read().split():
-        return
-    print(f"{'add' if go else 'would add'} .agent_project_root to .git/info/exclude")
-    if go:
-        os.makedirs(os.path.dirname(excl), exist_ok=True)
-        with open(excl, "a") as fh:
-            fh.write(".agent_project_root\n")
-
-
 def report(root, code_dir, groot):
     where = "repo root" if groot == root else (f"inside repo {groot}" if groot else "not a git repo")
     print(f"git: {where}; code folder: {os.path.relpath(code_dir, root)}")
-    for f in ("README.md", "CLAUDE.md", "AGENTS.md", "agents.md", "ENVIRONMENTS.md", "CODE_MAP.md", "handover/INDEX.md"):
-        print(f"  {'found ' if os.path.exists(os.path.join(root, f)) else 'absent'}  {f}")
+    for f in ("README.md", "AGENTS.md", "CLAUDE.md", ".claude/CLAUDE.md", "CLAUDE.local.md", "agents.md",
+              "ENVIRONMENTS.md", "CODE_MAP.md", "handover/INDEX.md"):
+        print(f"  {'found ' if exists_exact(root, f) else 'absent'}  {f}")
     wt = git(code_dir, "worktree", "list")
     if wt and len(wt.splitlines()) > 1:
         print(f"worktrees of {os.path.relpath(code_dir, root)}:")
@@ -143,17 +134,37 @@ def uses_analysis_workflow(root):
     return os.path.exists(p) and "analysis-workflow@quadbio" in open(p, errors="ignore").read()
 
 
-def report_legacy(root):
-    for legacy in ("AGENTS.md", "agents.md"):
-        if os.path.exists(os.path.join(root, legacy)):
-            refs = references_to(root, legacy)
-            print(f"\nconvert: {legacy} -> CLAUDE.md (SKILL.md step 5); files that mention it ({len(refs)}):")
+CLAUDE_FILES = ("CLAUDE.md", os.path.join(".claude", "CLAUDE.md"), "CLAUDE.local.md")
+
+
+def claude_files_above(root):
+    """CLAUDE.md files in folders above root: Claude Code reads them instead of AGENTS.md (the user's own
+    ~/.claude/CLAUDE.md doesn't count)."""
+    hits, home, d = [], os.path.expanduser("~"), os.path.dirname(root)
+    while True:
+        for f in CLAUDE_FILES:
+            p = os.path.join(d, f)
+            if exists_exact(d, f) and os.path.isfile(p) and not (d == home and f == CLAUDE_FILES[1]):
+                hits.append(p)
+        parent = os.path.dirname(d)
+        if parent == d:
+            return hits
+        d = parent
+
+
+def report_conversions(root, groot):
+    for legacy in (*CLAUDE_FILES, "agents.md"):
+        if exists_exact(root, legacy):
+            refs = references_to(root, os.path.basename(legacy))
+            print(f"\nconvert: {legacy} -> AGENTS.md (SKILL.md step 5); files that mention it ({len(refs)}):")
             for r in refs:
                 print(f"  {r}")
-    c = codex_reads_claude_md()
-    print("\ncodex: " + {True: "reads CLAUDE.md (project_doc_fallback_filenames)",
-                         False: "does NOT read CLAUDE.md: add project_doc_fallback_filenames = [\"CLAUDE.md\"] to ~/.codex/config.toml",
-                         None: "no ~/.codex/config.toml on this machine"}[c])
+    for p in claude_files_above(root):
+        print(f"\nabove the project: {p} makes Claude Code read it instead of AGENTS.md (SKILL.md step 5)")
+    if groot:
+        ignored = subprocess.run(["git", "-C", groot, "check-ignore", "-q", ".claude/worktrees/x"]).returncode == 0
+        if not ignored:
+            print("\n.gitignore: add .claude/worktrees/ (where claude --worktree puts task worktrees)")
 
 
 def main():
@@ -161,7 +172,6 @@ def main():
     ap.add_argument("project_dir")
     ap.add_argument("--name")
     ap.add_argument("--code-dir")
-    ap.add_argument("--codex-marker", action="store_true")
     ap.add_argument("--go", action="store_true")
     a = ap.parse_args()
     root = os.path.abspath(a.project_dir)
@@ -172,19 +182,17 @@ def main():
     groot = git(root, "rev-parse", "--show-toplevel")
     print(f"== {root} ({'writing' if a.go else 'dry run'})")
     if uses_analysis_workflow(root):
-        print("note: this repo enables analysis-workflow@quadbio: keep its AGENTS.md, task directories and "
-              "worktrees (SKILL.md, before step 1); create only CODE_MAP.md / ENVIRONMENTS.md if the user wants them")
+        print("note: this repo enables analysis-workflow@quadbio: it keeps task records in task directories, so "
+              "don't add handover/ (SKILL.md, before step 1); create only CODE_MAP.md / ENVIRONMENTS.md if the user wants them")
     report(root, code_dir, groot)
-    plan = plan_files(root, name, code_dir, a.codex_marker)
+    plan = plan_files(root, name, code_dir)
     for rel, produce in plan:
         print(f"{'create' if a.go else 'would create'}: {rel}")
         if a.go:
             write_new(root, rel, produce())
-    if a.codex_marker and groot == root:
-        exclude_marker(root, a.go)
     if not plan:
         print("nothing to create")
-    report_legacy(root)
+    report_conversions(root, groot)
     return 0
 
 

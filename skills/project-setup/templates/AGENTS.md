@@ -24,11 +24,11 @@ When sources disagree: (1) code, configs and data manifests; (2) this file; (3) 
 
 ```
 {name}/
-  CLAUDE.md          this file (the one instruction file for Claude and Codex)
+  AGENTS.md          this file (the one instruction file for Claude Code and Codex)
   CODE_MAP.md        packages, modules, scripts; ENVIRONMENTS.md  environments
   <folder>/          <what lives here>
   handover/          agent task records: INDEX.md + one folder per task
-  worktrees/         one git worktree per task (see Workflow)
+  .claude/worktrees/ one git worktree per task, git-ignored (see Workflow)
 ```
 
 ## Code
@@ -52,7 +52,8 @@ source; copies elsewhere are stale.>
 
 ## Workflow
 
-- One task = one git worktree (`worktrees/<YYYY-MM-DD>_<slug>`) = one branch; never commit on the main branch.
+- One task = one git worktree (`.claude/worktrees/<name>`, from `claude --worktree <name>`) = one branch; never
+  commit on the main branch.
   Check `git worktree list` (and open pull requests) for overlapping work first. Outputs go to the results tree
   and the task's `handover/` folder, never into the worktree.
 - Commit as you go; push and open a pull request when the task is validated; merge only after the user approves.

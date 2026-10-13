@@ -29,8 +29,8 @@ when the reading is large and the answer small.
 - **Codex from Claude Code:** the Codex plugin (`codex:rescue`), naming `--model` and `--effort` when a specific
   one is wanted; or the shell: `codex exec -m <model> -C <project> "read <folder>/BRIEF.md and do it"`.
 - **Peer sessions:** message them; never resume or copy another session's subagents.
-- **Codex as the top agent:** Codex reads `AGENTS.md` (or `CLAUDE.md` when `project_doc_fallback_filenames`
-  includes it) and user skills from `~/.agents/skills/`, so the same instructions and skills can serve both.
+- **Codex as the top agent:** Codex and Claude Code both read the project's `AGENTS.md` (see the `project-setup`
+  skill), and Codex reads user skills from `~/.agents/skills/`, so the same instructions and skills can serve both.
   Hand work to Claude by writing a BRIEF.md into the task folder and telling the user which session takes it.
 
 ## Cross-check between two vendors
