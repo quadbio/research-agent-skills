@@ -9,7 +9,7 @@ Nothing in them is specific to a dataset, a cluster or one person.
 | --- | --- |
 | `skills/analysis-code/` | Writing and changing research code: think before coding, one owner per operation, small pure functions, correctness traps that silently give wrong results (drops in joins, pooled metrics, ignored seeds), verify before reporting. |
 | `skills/research-workflow/` | Running a task so the next agent can resume it: scope and stop rule, a pre-registered `PLAN.md` before compute, `PROGRESS.md` while working, `HANDOVER.md` at the end, briefs for subagents and Codex, and `runlock.py` (one writer per output folder). |
-| `skills/project-setup/` | Setting up or repairing a project: one `CLAUDE.md` that Claude Code and Codex both read, `CODE_MAP.md` and `ENVIRONMENTS.md` drafted by survey scripts, a `handover/` index, one worktree per task, pixi for new environments. |
+| `skills/project-setup/` | Setting up or repairing a project: one `AGENTS.md` that Claude Code and Codex both read, `CODE_MAP.md` and `ENVIRONMENTS.md` drafted by survey scripts, a `handover/` index, one worktree per task, pixi for new environments. |
 
 The skills are loaded on demand; there are no hooks. They work alongside the other
 [quadbio plugins](https://github.com/quadbio/claude-plugins): in repos that follow `analysis-workflow`, its
@@ -33,27 +33,7 @@ python3 runlock.py status <outdir>             # who holds it
 
 ## Install
 
-Once per machine, from the [quadbio marketplace](https://github.com/quadbio/claude-plugins):
-
-```bash
-claude plugin marketplace add quadbio/claude-plugins
-claude plugin install research-agent-skills@quadbio
-```
-
-Then turn on auto-update, which is off by default for marketplaces outside Anthropic's: in a session, `/plugin` →
-Marketplaces → quadbio → Enable auto-update. Or set it once in `~/.claude/settings.json`:
-
-```json
-{
-  "extraKnownMarketplaces": {
-    "quadbio": { "source": { "source": "github", "repo": "quadbio/claude-plugins" }, "autoUpdate": true }
-  }
-}
-```
-
-With auto-update on, every change merged into `main` reaches you without reinstalling: Claude Code checks shortly
-after a session starts, says `Plugin updated`, and loads the new skills in the next session (or after
-`/reload-plugins`).
+Once per machine, from the [quadbio marketplace](https://github.com/quadbio/claude-plugins).
 
 ## Develop
 
@@ -65,10 +45,8 @@ python3 skills/project-setup/scripts/setup_project.py <some project>   # dry run
 
 ## Release
 
-There is no release step. The plugin tracks `main` and has no `version` in `plugin.json` on purpose: Claude Code
-then versions it by commit, so every merge to `main` is an update for everyone with auto-update on. Adding a
-`version` would freeze users on that version until someone bumps it. Change skills through pull requests and try
-them with `claude --plugin-dir .` before merging, since a merge ships immediately.
+Bump `version` in `.claude-plugin/plugin.json` and merge: the marketplace follows `main`, and users update when the
+version changes.
 
 ## License
 
