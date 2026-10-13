@@ -1,11 +1,19 @@
 {
   "name": "research-agent-skills",
-  "version": "0.1.0",
   "description": "How coding agents write research code, run and hand over research tasks, and set up a project so Claude Code and Codex read the same instructions: three skills, loaded on demand.",
   "author": {
     "name": "quadbio"
   },
   "homepage": "https://github.com/quadbio/research-agent-skills",
   "license": "MIT",
-  "keywords": ["research-code", "handover", "pre-registration", "run-lock", "claude-md", "codex", "pixi", "git-worktree"]
+  "keywords": [
+    "research-code",
+    "handover",
+    "pre-registration",
+    "run-lock",
+    "claude-md",
+    "codex",
+    "pixi",
+    "git-worktree"
+  ]
 }

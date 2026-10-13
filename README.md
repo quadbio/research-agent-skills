@@ -33,7 +33,27 @@ python3 runlock.py status <outdir>             # who holds it
 
 ## Install
 
-Once per machine, from the [quadbio marketplace](https://github.com/quadbio/claude-plugins).
+Once per machine, from the [quadbio marketplace](https://github.com/quadbio/claude-plugins):
+
+```bash
+claude plugin marketplace add quadbio/claude-plugins
+claude plugin install research-agent-skills@quadbio
+```
+
+Then turn on auto-update, which is off by default for marketplaces outside Anthropic's: in a session, `/plugin` →
+Marketplaces → quadbio → Enable auto-update. Or set it once in `~/.claude/settings.json`:
+
+```json
+{
+  "extraKnownMarketplaces": {
+    "quadbio": { "source": { "source": "github", "repo": "quadbio/claude-plugins" }, "autoUpdate": true }
+  }
+}
+```
+
+With auto-update on, every change merged into `main` reaches you without reinstalling: Claude Code checks shortly
+after a session starts, says `Plugin updated`, and loads the new skills in the next session (or after
+`/reload-plugins`).
 
 ## Develop
 
@@ -45,8 +65,10 @@ python3 skills/project-setup/scripts/setup_project.py <some project>   # dry run
 
 ## Release
 
-Bump `version` in `.claude-plugin/plugin.json`, tag `vX.Y.Z`, then bump the `ref` in
-[quadbio/claude-plugins](https://github.com/quadbio/claude-plugins).
+There is no release step. The plugin tracks `main` and has no `version` in `plugin.json` on purpose: Claude Code
+then versions it by commit, so every merge to `main` is an update for everyone with auto-update on. Adding a
+`version` would freeze users on that version until someone bumps it. Change skills through pull requests and try
+them with `claude --plugin-dir .` before merging, since a merge ships immediately.
 
 ## License
 
