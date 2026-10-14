@@ -5,11 +5,13 @@
 
 Without --go it only reports (dry run). With --go it creates, never overwrites or deletes:
   AGENTS.md            from templates/AGENTS.md, if missing and no CLAUDE.md holds instructions to convert
-  CLAUDE.md            from templates/CLAUDE.md (only `@AGENTS.md`), if missing and AGENTS.md exists or is created
+  CLAUDE.md            from templates/CLAUDE.md (only `@AGENTS.md`), if missing, AGENTS.md exists or is created,
+                       and no .claude/CLAUDE.md already loads it
   ENVIRONMENTS.md      template + a survey draft (survey_envs.py on the code folder), if missing
   CODE_MAP.md          template + a survey draft (survey_code.py on the code folder), if missing
   handover/INDEX.md    from templates/INDEX.md, if missing
-It also reports a CLAUDE.md that holds instructions instead of importing AGENTS.md, a lowercase agents.md, the files
+It also reports a CLAUDE.md that holds instructions instead of importing AGENTS.md or whose import resolves to the
+wrong file, a lowercase agents.md, the files
 that mention them, git worktrees, and whether .claude/worktrees/ is ignored. The drafts are a starting point: the
 agent fills the gaps from the project's own documents.
 """
@@ -91,19 +93,52 @@ def code_draft(code_dir, name):
 
 
 CLAUDE_FILES = ("CLAUDE.md", os.path.join(".claude", "CLAUDE.md"))
-IMPORT_LINE = "@AGENTS.md"
+LOADS_AGENTS = ("import", "import+", "symlink")      # kinds through which Claude Code loads the project's AGENTS.md
+
+
+def import_line(rel):
+    """The import that loads the project's AGENTS.md from rel: imports resolve relative to the importing file, so
+    CLAUDE.md needs @AGENTS.md and .claude/CLAUDE.md needs @../AGENTS.md."""
+    return "@" + os.path.relpath("AGENTS.md", os.path.dirname(rel) or ".")
 
 
 def claude_md_kind(root, rel):
-    """None if rel is absent; "import" if it holds only the @AGENTS.md import (plus headings and blank lines);
-    "import+" if it imports AGENTS.md and also holds instructions; "instructions" if it doesn't import it."""
+    """What rel does for the project's AGENTS.md:
+    None            absent
+    "symlink"       a symlink to AGENTS.md (Claude reads the same file; never write through it)
+    "import"        only an import of AGENTS.md, plus headings and blank lines
+    "import+"       imports AGENTS.md and also holds instructions
+    "wrong-import"  imports an AGENTS.md that resolves elsewhere (e.g. @AGENTS.md inside .claude/)
+    "instructions"  holds instructions and doesn't import AGENTS.md"""
+    p = os.path.join(root, rel)
     if not exists_exact(root, rel):
         return None
-    with open(os.path.join(root, rel), errors="ignore") as fh:
-        lines = [x.strip() for x in fh if x.strip() and not x.lstrip().startswith("#")]
-    if IMPORT_LINE not in lines:
+    agents = os.path.realpath(os.path.join(root, "AGENTS.md"))
+    if os.path.islink(p) and os.path.realpath(p) == agents:
+        return "symlink"
+    try:
+        with open(p, errors="ignore") as fh:
+            lines = [x.strip() for x in fh if x.strip() and not x.lstrip().startswith("#")]
+    except OSError:                   # e.g. a dangling symlink
         return "instructions"
-    return "import" if lines == [IMPORT_LINE] else "import+"
+    imports, wrong, other = False, False, False
+    for line in lines:
+        target = line[1:].strip()
+        if line.startswith("@") and os.path.realpath(os.path.join(os.path.dirname(p), target)) == agents:
+            imports = True
+        elif line.startswith("@") and os.path.basename(target) == "AGENTS.md":
+            wrong = True
+        else:
+            other = True
+    if imports:
+        return "import+" if other else "import"
+    return "wrong-import" if wrong and not other else "instructions"
+
+
+def symlink_note(root, rel):
+    """' (symlink to X)' for a symlinked file, else ''."""
+    p = os.path.join(root, rel)
+    return f" (symlink to {os.readlink(p)})" if os.path.islink(p) else ""
 
 
 def plan_files(root, name, code_dir):
@@ -120,7 +155,7 @@ def plan_files(root, name, code_dir):
     elif not exists("AGENTS.md"):
         plan.append(("AGENTS.md", lambda: render("AGENTS.md", name)))
     agents_md = exists("AGENTS.md") or any(rel == "AGENTS.md" for rel, _ in plan)
-    if agents_md and kinds == [None, None]:
+    if agents_md and kinds[0] is None and kinds[1] not in LOADS_AGENTS:
         plan.append(("CLAUDE.md", lambda: render("CLAUDE.md", name)))
     if not exists("ENVIRONMENTS.md"):
         plan.append(("ENVIRONMENTS.md", lambda: env_draft(code_dir, name)))
@@ -144,8 +179,12 @@ def report(root, code_dir, groot):
     for f in ("README.md", "AGENTS.md", "CLAUDE.md", ".claude/CLAUDE.md", "agents.md",
               "ENVIRONMENTS.md", "CODE_MAP.md", "handover/INDEX.md"):
         kind = claude_md_kind(root, f) if f in CLAUDE_FILES else None
-        note = {"import": " (imports AGENTS.md)", "import+": " (imports AGENTS.md, and holds instructions)",
+        note = {"symlink": " (symlink to AGENTS.md)", "import": " (imports AGENTS.md)",
+                "import+": " (imports AGENTS.md, and holds instructions)",
+                "wrong-import": " (imports an AGENTS.md that isn't the project's)",
                 "instructions": " (holds instructions, no AGENTS.md import)"}.get(kind, "")
+        if kind in ("import", "import+", "wrong-import", "instructions"):
+            note += symlink_note(root, f)
         print(f"  {'found ' if exists_exact(root, f) else 'absent'}  {f}{note}")
     wt = git(code_dir, "worktree", "list")
     if wt and len(wt.splitlines()) > 1:
@@ -160,13 +199,20 @@ def uses_analysis_workflow(root):
 
 
 def report_conversions(root, groot):
+    for f in CLAUDE_FILES:
+        if claude_md_kind(root, f) == "wrong-import":
+            print(f"\nfix: {f} imports an AGENTS.md next to itself, not the project's: imports resolve relative to "
+                  f"the importing file, so use {import_line(f)} (SKILL.md step 5)")
     to_convert = [f for f in CLAUDE_FILES if claude_md_kind(root, f) in ("instructions", "import+")]
     if exists_exact(root, "agents.md"):
         to_convert.append("agents.md")
     for legacy in to_convert:
         refs = references_to(root, os.path.basename(legacy))
         what = "rename it to AGENTS.md" if legacy == "agents.md" else \
-            f"move its instructions into AGENTS.md and leave only {IMPORT_LINE}"
+            f"move its instructions into AGENTS.md and leave only {import_line(legacy)}"
+        if os.path.islink(os.path.join(root, legacy)):
+            what += f"; it is a symlink to {os.readlink(os.path.join(root, legacy))}: remove the link first, " \
+                    "don't write through it"
         print(f"\nconvert: {legacy}: {what} (SKILL.md step 5); files that mention it ({len(refs)}):")
         for r in refs:
             print(f"  {r}")
