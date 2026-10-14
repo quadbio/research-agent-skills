@@ -108,7 +108,7 @@ def claude_md_kind(root, rel):
     "symlink"       a symlink to AGENTS.md (Claude reads the same file; never write through it)
     "import"        only an import of AGENTS.md, plus headings and blank lines
     "import+"       imports AGENTS.md and also holds instructions
-    "wrong-import"  imports an AGENTS.md that resolves elsewhere (e.g. @AGENTS.md inside .claude/)
+    "wrong-import"  imports an AGENTS.md path that doesn't exist (e.g. @AGENTS.md inside .claude/)
     "instructions"  holds instructions and doesn't import AGENTS.md"""
     p = os.path.join(root, rel)
     if not exists_exact(root, rel):
@@ -126,8 +126,9 @@ def claude_md_kind(root, rel):
         target = line[1:].strip()
         if line.startswith("@") and os.path.realpath(os.path.join(os.path.dirname(p), target)) == agents:
             imports = True
-        elif line.startswith("@") and os.path.basename(target) == "AGENTS.md":
-            wrong = True
+        elif line.startswith("@") and os.path.basename(target) == "AGENTS.md" and \
+                not os.path.exists(os.path.join(os.path.dirname(p), target)):
+            wrong = True              # a path slip (missing file); an existing one brings in rules to migrate
         else:
             other = True
     if imports:                       # a second AGENTS.md import elsewhere is competing instructions too
@@ -201,8 +202,10 @@ def uses_analysis_workflow(root):
 def report_conversions(root, groot):
     for f in CLAUDE_FILES:
         if claude_md_kind(root, f) == "wrong-import":
-            print(f"\nfix: {f} imports an AGENTS.md next to itself, not the project's: imports resolve relative to "
-                  f"the importing file, so use {import_line(f)} (SKILL.md step 5)")
+            link = f"; it is a symlink to {os.readlink(os.path.join(root, f))}: remove the link first, don't write " \
+                   "through it" if os.path.islink(os.path.join(root, f)) else ""
+            print(f"\nfix: {f} imports an AGENTS.md path that doesn't exist: imports resolve relative to the "
+                  f"importing file, so use {import_line(f)}{link} (SKILL.md step 5)")
     to_convert = [f for f in CLAUDE_FILES if claude_md_kind(root, f) in ("instructions", "import+")]
     if exists_exact(root, "agents.md"):
         to_convert.append("agents.md")
