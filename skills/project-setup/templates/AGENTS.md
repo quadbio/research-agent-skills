@@ -25,6 +25,7 @@ When sources disagree: (1) code, configs and data manifests; (2) this file; (3) 
 ```
 {name}/
   AGENTS.md          this file (the one instruction file for Claude Code and Codex)
+  CLAUDE.md          imports this file for Claude Code (`@AGENTS.md`); add nothing else there
   CODE_MAP.md        packages, modules, scripts; ENVIRONMENTS.md  environments
   <folder>/          <what lives here>
   handover/          agent task records: INDEX.md + one folder per task

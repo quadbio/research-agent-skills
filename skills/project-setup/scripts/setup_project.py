@@ -4,13 +4,14 @@
     setup_project.py <project_dir> [--name NAME] [--code-dir DIR] [--go]
 
 Without --go it only reports (dry run). With --go it creates, never overwrites or deletes:
-  AGENTS.md            from templates/AGENTS.md, if the folder has neither AGENTS.md nor CLAUDE.md
+  AGENTS.md            from templates/AGENTS.md, if missing and no CLAUDE.md holds instructions to convert
+  CLAUDE.md            from templates/CLAUDE.md (only `@AGENTS.md`), if missing and AGENTS.md exists or is created
   ENVIRONMENTS.md      template + a survey draft (survey_envs.py on the code folder), if missing
   CODE_MAP.md          template + a survey draft (survey_code.py on the code folder), if missing
   handover/INDEX.md    from templates/INDEX.md, if missing
-It also reports CLAUDE.md / CLAUDE.local.md / agents.md files to convert (here or in a folder above, where they stop
-Claude Code from reading AGENTS.md), the files that mention them, git worktrees, and whether .claude/worktrees/ is
-ignored. The drafts are a starting point: the agent fills the gaps from the project's own documents.
+It also reports a CLAUDE.md that holds instructions instead of importing AGENTS.md, a lowercase agents.md, the files
+that mention them, git worktrees, and whether .claude/worktrees/ is ignored. The drafts are a starting point: the
+agent fills the gaps from the project's own documents.
 """
 import argparse
 import datetime as dt
@@ -89,17 +90,38 @@ def code_draft(code_dir, name):
     return render("CODE_MAP.md", name) + DRAFT_HEADER + survey_code.render(code_dir, *survey_code.survey(code_dir, 5)) + "\n"
 
 
+CLAUDE_FILES = ("CLAUDE.md", os.path.join(".claude", "CLAUDE.md"))
+IMPORT_LINE = "@AGENTS.md"
+
+
+def claude_md_kind(root, rel):
+    """None if rel is absent; "import" if it holds only the @AGENTS.md import (plus headings and blank lines);
+    "import+" if it imports AGENTS.md and also holds instructions; "instructions" if it doesn't import it."""
+    if not exists_exact(root, rel):
+        return None
+    with open(os.path.join(root, rel), errors="ignore") as fh:
+        lines = [x.strip() for x in fh if x.strip() and not x.lstrip().startswith("#")]
+    if IMPORT_LINE not in lines:
+        return "instructions"
+    return "import" if lines == [IMPORT_LINE] else "import+"
+
+
 def plan_files(root, name, code_dir):
     """[(relative path, producer)] for every scaffolding file that is missing."""
     def exists(rel):
         return exists_exact(root, rel)
     plan = []
-    if not exists("AGENTS.md") and (exists("CLAUDE.md") or exists(os.path.join(".claude", "CLAUDE.md"))):
-        print("skip:  AGENTS.md template, because a CLAUDE.md exists: rename it to AGENTS.md instead (SKILL.md step 5)")
+    kinds = [claude_md_kind(root, f) for f in CLAUDE_FILES]
+    if not exists("AGENTS.md") and {"instructions", "import+"} & set(kinds):
+        print("skip:  AGENTS.md template, because a CLAUDE.md holds the instructions: move them into AGENTS.md "
+              "instead (SKILL.md step 5)")
     elif not exists("AGENTS.md") and exists("agents.md"):
         print("skip:  AGENTS.md template, because agents.md exists: rename it to AGENTS.md instead (SKILL.md step 5)")
     elif not exists("AGENTS.md"):
         plan.append(("AGENTS.md", lambda: render("AGENTS.md", name)))
+    agents_md = exists("AGENTS.md") or any(rel == "AGENTS.md" for rel, _ in plan)
+    if agents_md and kinds == [None, None]:
+        plan.append(("CLAUDE.md", lambda: render("CLAUDE.md", name)))
     if not exists("ENVIRONMENTS.md"):
         plan.append(("ENVIRONMENTS.md", lambda: env_draft(code_dir, name)))
     if not exists("CODE_MAP.md"):
@@ -119,9 +141,12 @@ def write_new(root, rel, text):
 def report(root, code_dir, groot):
     where = "repo root" if groot == root else (f"inside repo {groot}" if groot else "not a git repo")
     print(f"git: {where}; code folder: {os.path.relpath(code_dir, root)}")
-    for f in ("README.md", "AGENTS.md", "CLAUDE.md", ".claude/CLAUDE.md", "CLAUDE.local.md", "agents.md",
+    for f in ("README.md", "AGENTS.md", "CLAUDE.md", ".claude/CLAUDE.md", "agents.md",
               "ENVIRONMENTS.md", "CODE_MAP.md", "handover/INDEX.md"):
-        print(f"  {'found ' if exists_exact(root, f) else 'absent'}  {f}")
+        kind = claude_md_kind(root, f) if f in CLAUDE_FILES else None
+        note = {"import": " (imports AGENTS.md)", "import+": " (imports AGENTS.md, and holds instructions)",
+                "instructions": " (holds instructions, no AGENTS.md import)"}.get(kind, "")
+        print(f"  {'found ' if exists_exact(root, f) else 'absent'}  {f}{note}")
     wt = git(code_dir, "worktree", "list")
     if wt and len(wt.splitlines()) > 1:
         print(f"worktrees of {os.path.relpath(code_dir, root)}:")
@@ -134,33 +159,17 @@ def uses_analysis_workflow(root):
     return os.path.exists(p) and "analysis-workflow@quadbio" in open(p, errors="ignore").read()
 
 
-CLAUDE_FILES = ("CLAUDE.md", os.path.join(".claude", "CLAUDE.md"), "CLAUDE.local.md")
-
-
-def claude_files_above(root):
-    """CLAUDE.md files in folders above root: Claude Code reads them instead of AGENTS.md (the user's own
-    ~/.claude/CLAUDE.md doesn't count)."""
-    hits, home, d = [], os.path.expanduser("~"), os.path.dirname(root)
-    while True:
-        for f in CLAUDE_FILES:
-            p = os.path.join(d, f)
-            if exists_exact(d, f) and os.path.isfile(p) and not (d == home and f == CLAUDE_FILES[1]):
-                hits.append(p)
-        parent = os.path.dirname(d)
-        if parent == d:
-            return hits
-        d = parent
-
-
 def report_conversions(root, groot):
-    for legacy in (*CLAUDE_FILES, "agents.md"):
-        if exists_exact(root, legacy):
-            refs = references_to(root, os.path.basename(legacy))
-            print(f"\nconvert: {legacy} -> AGENTS.md (SKILL.md step 5); files that mention it ({len(refs)}):")
-            for r in refs:
-                print(f"  {r}")
-    for p in claude_files_above(root):
-        print(f"\nabove the project: {p} makes Claude Code read it instead of AGENTS.md (SKILL.md step 5)")
+    to_convert = [f for f in CLAUDE_FILES if claude_md_kind(root, f) in ("instructions", "import+")]
+    if exists_exact(root, "agents.md"):
+        to_convert.append("agents.md")
+    for legacy in to_convert:
+        refs = references_to(root, os.path.basename(legacy))
+        what = "rename it to AGENTS.md" if legacy == "agents.md" else \
+            f"move its instructions into AGENTS.md and leave only {IMPORT_LINE}"
+        print(f"\nconvert: {legacy}: {what} (SKILL.md step 5); files that mention it ({len(refs)}):")
+        for r in refs:
+            print(f"  {r}")
     if groot:
         ignored = subprocess.run(["git", "-C", groot, "check-ignore", "-q", ".claude/worktrees/x"]).returncode == 0
         if not ignored:
