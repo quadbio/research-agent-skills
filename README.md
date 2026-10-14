@@ -9,7 +9,7 @@ Nothing in them is specific to a dataset, a cluster or one person.
 | --- | --- |
 | `skills/analysis-code/` | Writing and changing research code: think before coding, one owner per operation, small pure functions, correctness traps that silently give wrong results (drops in joins, pooled metrics, ignored seeds), verify before reporting. |
 | `skills/research-workflow/` | Running a task so the next agent can resume it: scope and stop rule, a pre-registered `PLAN.md` before compute, `PROGRESS.md` while working, `HANDOVER.md` at the end, briefs for subagents and Codex, and `runlock.py` (one writer per output folder). |
-| `skills/project-setup/` | Setting up or repairing a project: one `AGENTS.md` that Claude Code and Codex both read, `CODE_MAP.md` and `ENVIRONMENTS.md` drafted by survey scripts, a `handover/` index, one worktree per task, pixi for new environments. |
+| `skills/project-setup/` | Setting up or repairing a project: one `AGENTS.md` for Claude Code and Codex, with a `CLAUDE.md` that imports it, `CODE_MAP.md` and `ENVIRONMENTS.md` drafted by survey scripts, a `handover/` index, one worktree per task, pixi for new environments. |
 
 The skills are loaded on demand; there are no hooks. They work alongside the other
 [quadbio plugins](https://github.com/quadbio/claude-plugins): in repos that follow `analysis-workflow`, its
