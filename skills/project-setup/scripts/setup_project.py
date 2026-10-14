@@ -130,8 +130,8 @@ def claude_md_kind(root, rel):
             wrong = True
         else:
             other = True
-    if imports:
-        return "import+" if other else "import"
+    if imports:                       # a second AGENTS.md import elsewhere is competing instructions too
+        return "import+" if other or wrong else "import"
     return "wrong-import" if wrong and not other else "instructions"
 
 
