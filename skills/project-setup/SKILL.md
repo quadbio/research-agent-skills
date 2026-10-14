@@ -94,7 +94,11 @@ Instructions in `AGENTS.md`, and a `CLAUDE.md` that only imports it:
   unchanged, create a new `CLAUDE.md` from `templates/CLAUDE.md`, then fill gaps as in step 3.
 - Both exist and `CLAUDE.md` holds instructions: merge them into `AGENTS.md`, then reduce `CLAUDE.md` to the title
   and `@AGENTS.md`.
-- A `CLAUDE.md` that already holds only `@AGENTS.md` (as `analysis_template` ships it) is correct: keep it.
+- A `CLAUDE.md` that already holds only `@AGENTS.md` (as `analysis_template` ships it) is correct: keep it. So is a
+  `CLAUDE.md` that is a symlink to `AGENTS.md`. To replace any symlinked `CLAUDE.md`, remove the link first
+  (`git rm` when tracked), then create the file: writing to the link overwrites the file it points to.
+- Imports resolve relative to the file that holds them: in `.claude/CLAUDE.md` the line is `@../AGENTS.md`, since
+  `@AGENTS.md` there means `.claude/AGENTS.md`.
 - A `.claude/CLAUDE.md` with instructions: merge them into `AGENTS.md` as well, and keep one importing `CLAUDE.md`.
 - A `CLAUDE.local.md` or a `CLAUDE.md` in a folder above the repo needs no change: the import still loads `AGENTS.md`.
 - Lowercase `agents.md` is loaded by neither agent: rename it, or keep it as package documentation and point to it.
